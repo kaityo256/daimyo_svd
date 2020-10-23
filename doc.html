@@ -92,9 +92,12 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 <h2 id="はじめに">はじめに</h2>
 <p>線形代数には、特異値分解という操作があります。行列を特異値と、それをくくりだす行列に分解する処理です。この分解は可逆処理ですが、特異値の大きいところだけを取り、小さいところを無視することで元の行列を近似することができます。近年、この性質を利用した情報圧縮が様々な場所で積極的に利用されています。筆者の身近なところでは、量子状態をテンソルネットワークで近似する際、特異値分解が中心的な役割を果たします。</p>
 <p>本稿では、特異値分解がどういう処理なのか、実際に簡単な行列で試してみて、「なるほど情報圧縮だなぁ」というのを実感することを目的とします。</p>
+<p>コードは以下においておきます。</p>
+<p><a href="https://github.com/kaityo256/daimyo_svd" class="uri">https://github.com/kaityo256/daimyo_svd</a></p>
+<p>Google ColabでJupyter Notebookを開きたい場合は<a href="https://colab.research.google.com/github/kaityo256/daimyo_svd/blob/main/daimyo_svd.ipynb">こちら</a>をクリックしてください。</p>
 <h2 id="特異値分解してみる">特異値分解してみる</h2>
 <p>まず細かいことはさておき、特異値分解により情報圧縮ができることを確認してみましょう。以下、Google Colabでの実行を想定しています。他の環境で実行する場合は、フォントへのパスの指定の方法など、適宜読み替えてください。</p>
-<h3 id="対象となる行列の準備">対象となる行列の準備</h3>
+<h2 id="対象となる行列の準備">対象となる行列の準備</h2>
 <p>まずは必要なものをimportしましょう。</p>
 <div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python"><span class="im">from</span> PIL <span class="im">import</span> Image, ImageDraw, ImageFont
 <span class="im">import</span> numpy <span class="im">as</span> np
@@ -114,8 +117,8 @@ draw.text((<span class="dv">0</span>,<span class="dv">0</span>), <span class="st
 img</code></pre></div>
 <p>こんな感じで「大名行列」が表示された成功です。</p>
 <div class="figure">
-<img src="fig/daimyo1.png" alt="実行結果1" />
-<p class="caption">実行結果1</p>
+<img src="fig/image0.png" alt="image0.png" />
+<p class="caption">image0.png</p>
 </div>
 <p>さて、描画したイメージから、NumPy配列の形で行列を受け取りましょう。単に<code>np.array</code>に<code>img.getdata()</code>を食わすだけですが、それだと一次元配列になってしまうので、<code>reshape</code>で行列にします。</p>
 <div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">data <span class="op">=</span> np.array(img.getdata()).reshape((LY,LX))</code></pre></div>
@@ -124,8 +127,8 @@ img</code></pre></div>
 <div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">Image.fromarray(np.uint8(data))</code></pre></div>
 <p>以下のような表示がされたら成功です。</p>
 <div class="figure">
-<img src="fig/daimyo2.png" alt="実行結果2" />
-<p class="caption">実行結果2</p>
+<img src="fig/image1.png" alt="image1.png" />
+<p class="caption">image1.png</p>
 </div>
 <p>ここで、この行列のランクも確認しておきましょう。<code>np.linalg.matrix_rank</code>で確認できます。</p>
 <div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">np.linalg.matrix_rank(data) <span class="co"># =&gt; 47</span></code></pre></div>
@@ -144,38 +147,57 @@ v: (200, 200)</code></pre>
 <p><code>u</code>は50x50、<code>v</code>は200x200の正方行列です。<code>s</code>は数学的には50行200列の対角行列ですが、どうせ対角成分しかないので<code>scipy.linalg.svd</code>は一次元配列を返すことに注意しましょう。この<code>s</code>が特異値であり、全て非負の実数で、<code>scipy.linalg.svd</code>は降順に並べてくれます。<code>u</code>と<code>v</code>も特異値に対応した順番に並んでいます。</p>
 <p>特異値分解ができたので、もとの行列を低ランク近似しましょう。特異値を大きい方からr個だけ残すことにします。対応して、<code>u</code>の左から列ベクトルを<code>r</code>個とったものを<code>ur</code>、 <code>v</code>の上から行ベクトルを<code>r</code>個取った行列を<code>vr</code>とします。それぞれ50行r列、r行200列の行列になります。特異値については、r行r列の対角行列にしましょう。非負の実数なので、平方根を取ることができます。これを<code>sr</code>とし、<code>ur*sr</code>を<code>A</code>、<code>sr*vr</code>を<code>B</code>という行列にします。</p>
 <p>以上の操作をそのまま実装したのが以下のコードです。ここでは<code>r=10</code>としています。</p>
-<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">rank <span class="op">=</span> <span class="dv">10</span>
-ur <span class="op">=</span> u[:, :rank]
-ss <span class="op">=</span> np.sqrt(s)
-sr <span class="op">=</span> np.matrix(linalg.diagsvd(ss[:rank], rank,rank))
-vr <span class="op">=</span> v[:rank, :]
-A <span class="op">=</span> ur<span class="op">*</span>sr
-B <span class="op">=</span> sr<span class="op">*</span>vr</code></pre></div>
+<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">r <span class="op">=</span> <span class="dv">10</span>
+ur <span class="op">=</span> u[:, :r]
+sr <span class="op">=</span> np.diag(np.sqrt(s[:r]))
+vr <span class="op">=</span> v[:r, :]
+A <span class="op">=</span> ur <span class="op">@</span> sr
+B <span class="op">=</span> sr <span class="op">@</span> vr</code></pre></div>
 <p>Aは50行r列、Bはr行200列の行列ですから、その積はもとの行列である<code>data</code>と同じ、50行200列になります。</p>
 <div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python"><span class="bu">print</span>(<span class="ss">f&quot;A: </span><span class="sc">{A.</span>shape<span class="sc">}</span><span class="ss">&quot;</span>)
 <span class="bu">print</span>(<span class="ss">f&quot;B: </span><span class="sc">{B.</span>shape<span class="sc">}</span><span class="ss">&quot;</span>)
 <span class="bu">print</span>(<span class="ss">f&quot;AB: </span><span class="sc">{</span>(A<span class="op">*</span>B)<span class="sc">.</span>shape<span class="sc">}</span><span class="ss">&quot;</span>)</code></pre></div>
+<p>実行結果↓</p>
+<pre class="txt"><code>A: (50, 10)
+B: (10, 200)
+AB: (50, 200)</code></pre>
 <p>しかし、<code>data</code>のランクが47だったのに対し、<code>A*B</code>は特異値を10個しか残していないため、ランクが10の行列になります。</p>
-<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">np.linalg.matrix_rank(A<span class="op">*</span>B) <span class="co"># =&gt; 10</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">np.linalg.matrix_rank(A <span class="op">@</span> B) <span class="co"># =&gt; 10</span></code></pre></div>
 <p>確かにランクが10になっていますね。これが低ランク近似と呼ばれる所以です。</p>
 <p>さて、<code>data</code>という行列が、<code>A</code>と<code>B</code>という二つの行列で近似されました。どれくらいデータが圧縮されたか見てみましょう。行列の要素数は<code>size</code>で取れます。</p>
 <div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python"><span class="bu">print</span>((A.size <span class="op">+</span> B.size)<span class="op">/</span>data.size) <span class="co"># =&gt; 0.25</span></code></pre></div>
 <p>特異値を10個残した場合は、データは25%に圧縮されたことがわかります。</p>
 <h2 id="データの復元">データの復元</h2>
 <p>さて、低ランク近似のより、どれくらい情報が失われたか、イメージになおして見てみましょう。<code>A*B</code>により近似されたデータを画像に復元してみます。ただし、もともとピクセルデータが0から255までの値だったのが、近似によりはみ出してしまって画像がおかしくなるので<code>numpy.clip</code>により0から255までに押し込めています。</p>
-<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">b <span class="op">=</span> np.asarray(A<span class="op">*</span>B)
+<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">b <span class="op">=</span> np.asarray(A <span class="op">@</span> B)
 b <span class="op">=</span> np.clip(b, <span class="dv">0</span>, <span class="dv">255</span>)
 Image.fromarray(np.uint8(b))</code></pre></div>
 <p>こんな感じに復元されました。</p>
 <div class="figure">
-<img src="fig/daimyo3.png" alt="実行結果3" />
-<p class="caption">実行結果3</p>
+<img src="fig/image2.png" alt="image2.png" />
+<p class="caption">image2.png</p>
 </div>
+<p>さらに低ランク近似するとどうなるでしょうか。<code>r=3</code>にしてやってみましょう。</p>
+<div class="sourceCode"><pre class="sourceCode py"><code class="sourceCode python">r <span class="op">=</span> <span class="dv">3</span>
+ur <span class="op">=</span> u[:, :r]
+sr <span class="op">=</span> np.diag(np.sqrt(s[:r]))
+vr <span class="op">=</span> v[:r, :]
+A <span class="op">=</span> ur <span class="op">@</span> sr
+B <span class="op">=</span> sr <span class="op">@</span> vr
+b <span class="op">=</span> np.asarray(A <span class="op">@</span> B)
+b <span class="op">=</span> np.clip(b, <span class="dv">0</span>, <span class="dv">255</span>)
+Image.fromarray(np.uint8(b))</code></pre></div>
+<p>結果はこんな感じになります。</p>
+<div class="figure">
+<img src="fig/image3.png" alt="image3.png" />
+<p class="caption">image3.png</p>
+</div>
+<p>斜めの線が苦手っぽいですね。</p>
 <h2 id="まとめ">まとめ</h2>
 <p>特異値分解がどのように情報圧縮に使われるかを確認するため、「大名行列」と書かれた画像を行列だと思って、特異値分解し、低ランク近似した行列を作り、情報圧縮率を確認し、データを復元してみました。このコードを試してみて、「なるほど低ランク近似だなぁ」と思ってもらえれば幸いです。</p>
 <h2 id="補足資料">補足資料</h2>
 <p>上記の操作の数学的な側面について補足しておきます。</p>
-<h3 id="特異値とは">特異値とは</h3>
+<h2 id="特異値とは">特異値とは</h2>
 <p>正方行列<span class="math inline">\(A\)</span>について、以下のような分解を考えます。</p>
 <p><span class="math display">\[
 A = P^{-1} D P
@@ -193,8 +215,8 @@ X = U \Sigma V^\dagger
 <h2 id="低ランク近似">低ランク近似</h2>
 <p>さて、行列積の定義により、<span class="math inline">\(m\)</span>行<span class="math inline">\(r\)</span>列の行列と、<span class="math inline">\(r\)</span>行<span class="math inline">\(n\)</span>列の行列をかけると、真ん中の<span class="math inline">\(r\)</span>個の足がつぶれて<span class="math inline">\(m\)</span>行<span class="math inline">\(n\)</span>列の行列になります。ここから<span class="math inline">\(r\)</span>を小さくとることで、<span class="math inline">\(m\)</span>行<span class="math inline">\(n\)</span>列の行列を、<span class="math inline">\(m\)</span>行<span class="math inline">\(r\)</span>列の行列と<span class="math inline">\(r\)</span>行<span class="math inline">\(n\)</span>列の行列二つで近似することができます。</p>
 <div class="figure">
-<img src="fig/matmul.png" alt="matmul.png" />
-<p class="caption">matmul.png</p>
+<img src="fig/image4.png" alt="image4.png" />
+<p class="caption">image4.png</p>
 </div>
 <p>行列のランクは、行と列の小さい方で決まります。したがって、<span class="math inline">\(r &lt; m &lt; n\)</span>ならば、<span class="math inline">\(m\)</span>行<span class="math inline">\(r\)</span>列の行列も、<span class="math inline">\(r\)</span>行<span class="math inline">\(n\)</span>列も、ランクは最大で<span class="math inline">\(r\)</span>です。ランク<span class="math inline">\(r\)</span>同士の行列をかけてもランクは増えないので、<span class="math inline">\(AB\)</span>という<span class="math inline">\(m\)</span>行<span class="math inline">\(n\)</span>列の行列のランクも<span class="math inline">\(r\)</span>となります。</p>
 <p>このように、ある行列を別の小さい行列の積で近似する際、もとの行列より低いランクの行列で近似する、低ランク近似になっています。このような小さい行列の作り方にはいろんな方法がありますが、フロベニウスノルムの意味で最良近似になっているのが特異値分解を用いた近似です。</p>
@@ -204,19 +226,19 @@ X = U \Sigma V^\dagger
 \]</span></p>
 <p>が得られているとしましょう。<span class="math inline">\(U\)</span>と<span class="math inline">\(V\)</span>はそれぞれ<span class="math inline">\(m\)</span>行<span class="math inline">\(m\)</span>列、<span class="math inline">\(n\)</span>行<span class="math inline">\(n\)</span>列の正方行列で、どちらもユニタリ行列です。<span class="math inline">\(V^\dagger\)</span>は<span class="math inline">\(V\)</span>の随伴行列(転置して複素共役をとったもの)です。<span class="math inline">\(\Sigma\)</span>は<span class="math inline">\(m\)</span>行<span class="math inline">\(n\)</span>列の対角行列で、対角要素に特異値が並んでいます。この際、上から大きい順に並べておきます(<span class="math inline">\(U\)</span>と<span class="math inline">\(V\)</span>も対応するように決めます)。</p>
 <div class="figure">
-<img src="fig/svd.png" alt="svd.png" />
-<p class="caption">svd.png</p>
+<img src="fig/image5.png" alt="image5.png" />
+<p class="caption">image5.png</p>
 </div>
 <p>さて、特異値を<span class="math inline">\(r\)</span>個だけ使った低ランク近似をすることにしましょう。これは、<span class="math inline">\(\Sigma\)</span>の左上から<span class="math inline">\(r\)</span>行<span class="math inline">\(列\)</span>の正方行列部分だけ使い、<span class="math inline">\(U\)</span>の列ベクトルを左から<span class="math inline">\(r\)</span>個、<span class="math inline">\(V^\dagger\)</span>の行ベクトルを上から<span class="math inline">\(r\)</span>個とってもとの行列を近似する形になります。さて、特異値は非負の実数で、<span class="math inline">\(\Sigma\)</span>は対角行列なので、<span class="math inline">\(\Sigma = \sqrt{\Sigma} \sqrt{\Sigma}\)</span>と分けることができます。これを<span class="math inline">\(U\)</span>由来の行列と<span class="math inline">\(V^\dagger\)</span>由来行列とまとめましょう。図解するとこんな感じです。</p>
 <div class="figure">
-<img src="fig/svd2.png" alt="svd2.png" />
-<p class="caption">svd2.png</p>
+<img src="fig/image6.png" alt="image6.png" />
+<p class="caption">image6.png</p>
 </div>
 <p>以上から、</p>
 <p><span class="math display">\[
 \tilde{X} = A B
 \]</span></p>
-<p>と近似されました。こうして、<span class="math inline">\(m\)</span>行<span class="math inline">\(n\)</span>列の行列<span class="math inline">\(X\)</span>が、特異値分解を通じて<span class="math inline">\(m\)</span>行<span class="math inline">\(r\)</span>列の行列<span class="math inline">\(A\)</span>と、<span class="math inline">\(r\)</span>行<span class="math inline">\(n\)</span>列の行列<span class="math inline">\(B\)</span>の積として近似できました。もとの行列のランクは最大で<span class="math inline">\(\min(m,n)\)</span>ですが、こうして近似された行列のランクは最大で<span class="math inline">\(r\)</span>になります。もともと<span class="math inline">\(m*n\)</span>個あった行列要素は、<span class="math inline">\(r*(m+n)\)</span>になりました。<span class="math inline">\(r\)</span>が小さいときには情報が圧縮されたことがわかります。</p>
+<p>を得ます。こうして、<span class="math inline">\(m\)</span>行<span class="math inline">\(n\)</span>列の行列<span class="math inline">\(X\)</span>が、特異値分解を通じて<span class="math inline">\(m\)</span>行<span class="math inline">\(r\)</span>列の行列<span class="math inline">\(A\)</span>と、<span class="math inline">\(r\)</span>行<span class="math inline">\(n\)</span>列の行列<span class="math inline">\(B\)</span>の積として近似できました。もとの行列のランクは最大で<span class="math inline">\(\min(m,n)\)</span>ですが、こうして近似された行列のランクは最大で<span class="math inline">\(r\)</span>になります。もともと<span class="math inline">\(m*n\)</span>個あった行列要素は、<span class="math inline">\(r*(m+n)\)</span>になりました。<span class="math inline">\(r\)</span>が小さいときには情報が圧縮されたことがわかります。</p>
 <div class="footnotes">
 <hr />
 <ol>
